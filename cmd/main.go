@@ -24,8 +24,44 @@ func main() {
 
 	router.HandleFunc("/produto", createProdutoHandler).Methods("POST")
 
+	router.HandleFunc("/produtos", getProdutosHandler).Methods("GET")
+
 	fmt.Println("Servidor iniciado na porta 8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
+}
+
+func getProdutosHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	rows, err := database.DB.Query("SELECT idestoque, nome, quantidade, cor FROM estoque")
+	if err != nil {
+		log.Printf("Erro ao buscar produtos no DB: %v", err)
+		http.Error(w, "Erro interno ao buscar produtos", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	produtos := []Produto{}
+
+	for rows.Next() {
+		var p Produto
+
+		if err := rows.Scan(&p.ID, &p.Nome, &p.Quantidade, &p.Cor); err != nil {
+			log.Printf("Erro ao mapear linha do DB: %v", err)
+			continue
+		}
+		produtos = append(produtos, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("Erro durante a iteração das linhas: %v", err)
+		http.Error(w, "Erro interno ao processar dados", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(produtos)
 }
 
 func createProdutoHandler(w http.ResponseWriter, r *http.Request) {
