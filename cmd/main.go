@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
@@ -25,6 +26,8 @@ func main() {
 	router.HandleFunc("/produto", createProdutoHandler).Methods("POST")
 
 	router.HandleFunc("/produtos", getProdutosHandler).Methods("GET")
+
+	router.HandleFunc("/produto/{id}", deleteProdutoHandler).Methods("DELETE")
 
 	fmt.Println("Servidor iniciado na porta 8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
@@ -105,6 +108,46 @@ func createProdutoHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(produto)
+}
+
+func deleteProdutoHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "ID inválido", http.StatusBadRequest)
+		return
+	}
+
+	stmt, err := database.DB.Prepare("DELETE FROM estoque WHERE idestoque = ?")
+	if err != nil {
+		http.Error(w, "Erro ao preparar a declaração SQL", http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	res, err := stmt.Exec(id)
+	if err != nil {
+		http.Error(w, "Erro ao deletar produto", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		http.Error(w, "Erro ao verificar resultado da exclusão", http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		http.Error(w, "Produto não encontrado", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"mensagem": "Produto deletado com sucesso"})
 }
 
 type Produto struct {
