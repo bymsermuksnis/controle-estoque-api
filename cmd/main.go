@@ -29,6 +29,8 @@ func main() {
 
 	router.HandleFunc("/produto/{id}", deleteProdutoHandler).Methods("DELETE")
 
+	router.HandleFunc("/produto/{id}", updateProdutoHandler).Methods("PUT")
+
 	fmt.Println("Servidor iniciado na porta 8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
@@ -148,6 +150,62 @@ func deleteProdutoHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"mensagem": "Produto deletado com sucesso"})
+}
+
+func updateProdutoHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "ID inválido", http.StatusBadRequest)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Erro ao ler o corpo da requisição", http.StatusInternalServerError)
+		return
+	}
+
+	var produto Produto
+	err = json.Unmarshal(body, &produto)
+	if err != nil {
+		http.Error(w, "Erro ao decodificar o JSON", http.StatusBadRequest)
+		return
+	}
+
+	stmt, err := database.DB.Prepare("UPDATE estoque SET nome = ?, quantidade = ?, cor = ? WHERE idestoque = ?")
+	if err != nil {
+		log.Printf("Erro ao preparar a declaração SQL: %v", err)
+		http.Error(w, "Erro ao preparar a declaração SQL", http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	res, err := stmt.Exec(produto.Nome, produto.Quantidade, produto.Cor, id)
+	if err != nil {
+		log.Printf("Erro ao atualizar o produto no banco de dados: %v", err)
+		http.Error(w, "Erro ao atualizar o produto no banco de dados", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		http.Error(w, "Erro ao verificar o resultado da atualização", http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		http.Error(w, "Produto não encontrado ou nenhum dado alterado", http.StatusNotFound)
+		return
+	}
+
+	produto.ID = id
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(produto)
 }
 
 type Produto struct {
